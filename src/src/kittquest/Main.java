@@ -27,5 +27,5 @@ public class Main {
 
         // Start the game loop
         gamePanel.startGameLoop();
-    } //commit
+    } //commit main
 }
