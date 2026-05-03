@@ -12,9 +12,10 @@ public class Player {
 
     private float velocityX = 0;
     private float velocityY = 0;
-    private final float SPEED   = 4.5f;
-    private final float JUMP    = -13f;
-    private final float GRAVITY = 0.5f;
+    private final float BASE_SPEED = 4.5f;
+    private final float JUMP       = -13f;
+    private final float GRAVITY    = 0.5f;
+    private float currentSpeed     = BASE_SPEED;
 
     private boolean onGround     = false;
     private boolean movingLeft   = false;
@@ -22,6 +23,14 @@ public class Player {
     private boolean facingRight  = true;
     private boolean jumpPressed  = false;
     private boolean jumpConsumed = false;
+
+    // Powerup states
+    private boolean hasShield     = false;
+    private boolean hasDoubleJump = false;
+    private boolean doubleJumpUsed = false;
+
+    // Shield flash effect
+    private int shieldHitTimer = 0;
 
     private final int SPAWN_X = 80;
     private final int SPAWN_Y = 380;
@@ -32,24 +41,54 @@ public class Player {
 
     public Player() { x = SPAWN_X; y = SPAWN_Y; }
 
+    // ── Powerup setters
+    public void applySpeedBoost(boolean on) { currentSpeed = on ? BASE_SPEED * 1.4f : BASE_SPEED; }    public void applyShield(boolean on)      { hasShield = on; }
+    public void applyDoubleJump(boolean on)  { hasDoubleJump = on; doubleJumpUsed = false; }
+    public boolean hasShield()               { return hasShield; }
+
+    //timer for shiield
+    private int invincibleTimer = 0;
+    private static final int INVINCIBLE_FRAMES = 90; // 1.5 seconds
+
+
+    public boolean absorbHit() {
+        if (invincibleTimer > 0) return true; // already invincible, ignore hit
+        if (hasShield) {
+            hasShield = false;
+            shieldHitTimer = 30;
+            invincibleTimer = INVINCIBLE_FRAMES;
+            PowerupManager.activeEffect = null;
+            PowerupManager.effectTimer  = 0;
+            return true;
+        }
+        return false;
+    }
     public void update() {
-        if (movingLeft)       velocityX = -SPEED;
-        else if (movingRight) velocityX =  SPEED;
+        if (invincibleTimer > 0) invincibleTimer--;
+        if (movingLeft)       velocityX = -currentSpeed;
+        else if (movingRight) velocityX =  currentSpeed;
         else                  velocityX =  0;
 
-        // Jump — no OS delay
-        if (jumpPressed && !jumpConsumed && onGround) {
-            velocityY    = JUMP;
-            onGround     = false;
-            jumpConsumed = true;
-            if (GamePanel.sound != null) GamePanel.sound.playJumpSound();
+        // Jump
+        if (jumpPressed && !jumpConsumed) {
+            if (onGround) {
+                velocityY    = JUMP;
+                onGround     = false;
+                jumpConsumed = true;
+                if (GamePanel.sound != null) GamePanel.sound.playJumpSound();
+            } else if (hasDoubleJump && !doubleJumpUsed) {
+                // Double jump mid-air
+                velocityY      = JUMP * 0.85f;
+                doubleJumpUsed = true;
+                jumpConsumed   = true;
+                if (GamePanel.sound != null) GamePanel.sound.playJumpSound();
+            }
         }
 
         velocityY += GRAVITY;
         x += (int) velocityX;
         y += (int) velocityY;
 
-        // Platform collision
         onGround = false;
         ArrayList<Rectangle> platforms = GamePanel.level != null
                 ? GamePanel.level.getPlatforms() : new ArrayList<>();
@@ -57,11 +96,12 @@ public class Player {
         for (Rectangle platform : platforms) {
             if (getBounds().intersects(platform)) {
                 if (velocityY > 0 && y + height - (int)velocityY <= platform.y) {
-                    y        = platform.y - height;
+                    y         = platform.y - height;
                     velocityY = 0;
                     onGround  = true;
-                } else if (velocityY < 0 && y - (int)velocityY >= platform.y + platform.height) {
-                    y        = platform.y + platform.height;
+                    doubleJumpUsed = false; // reset double jump on land
+                } else if (velocityY < 0 && y-(int)velocityY >= platform.y+platform.height) {
+                    y         = platform.y + platform.height;
                     velocityY = 0;
                 } else {
                     if (velocityX > 0) x = platform.x - width;
@@ -71,13 +111,12 @@ public class Player {
             }
         }
 
-        // Clamp to level width
         if (x < 0) x = 0;
         int lw = GamePanel.level != null ? GamePanel.level.getLevelWidth() : GamePanel.SCREEN_WIDTH;
         if (x + width > lw) x = lw - width;
-
-        // Fell off screen
         if (y > GamePanel.SCREEN_HEIGHT) respawn();
+
+        if (shieldHitTimer > 0) shieldHitTimer--;
     }
 
     public void draw(Graphics2D g) {
@@ -91,59 +130,88 @@ public class Player {
         g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
         int dx = facingRight ? 0 : 4;
 
+        // Shield aura
+        if (hasShield) {
+            long t = System.currentTimeMillis();
+            int pulse = (int)(Math.abs(Math.sin(t/300.0))*8);
+            g.setColor(new Color(80,120,255,100));
+            g.fillOval(sx-pulse-4, y-pulse-4, width+pulse*2+8, height+pulse*2+8);
+            g.setColor(new Color(150,180,255,160));
+            g.setStroke(new BasicStroke(2.5f));
+            g.drawOval(sx-pulse-4, y-pulse-4, width+pulse*2+8, height+pulse*2+8);
+            g.setStroke(new BasicStroke(1));
+        }
+
+        // Shield hit flash
+        if (shieldHitTimer > 0 && shieldHitTimer % 4 < 2) {
+            g.setColor(new Color(255,255,255,180));
+            g.fillRoundRect(sx, y, width, height, 8, 8);
+        }
+
+        // Speed trail
+        if (PowerupManager.activeEffect == PowerupManager.PowerupType.SPEED) {
+            g.setColor(new Color(255,100,180,60));
+            int trailDir = facingRight ? -1 : 1;
+            g.fillRoundRect(sx+trailDir*20, y+5, width-8, height-10, 8, 8);
+            g.setColor(new Color(255,150,200,30));
+            g.fillRoundRect(sx+trailDir*36, y+10, width-16, height-20, 8, 8);
+        }
+
+        // Double jump sparkles
+        if (hasDoubleJump && !onGround && !doubleJumpUsed) {
+            long t = System.currentTimeMillis();
+            g.setColor(new Color(80,220,80,150));
+            int sp = (int)(Math.abs(Math.sin(t/200.0))*6);
+            g.fillOval(sx+width/2-sp, y+height-sp, sp*2, sp*2);
+        }
+
         // TAIL
         g.setColor(tailColor);
-        g.setStroke(new BasicStroke(5, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
-        if (facingRight) g.drawArc(sx-14, y+18, 22, 22, 180, -180);
-        else             g.drawArc(sx+width-8, y+18, 22, 22, 0, 180);
+        g.setStroke(new BasicStroke(5,BasicStroke.CAP_ROUND,BasicStroke.JOIN_ROUND));
+        if (facingRight) g.drawArc(sx-14,y+18,22,22,180,-180);
+        else             g.drawArc(sx+width-8,y+18,22,22,0,180);
         g.setStroke(new BasicStroke(1));
 
         // BODY
         g.setColor(bodyColor);
-        g.fillRoundRect(sx+dx, y+14, 36, 26, 12, 12);
+        g.fillRoundRect(sx+dx,y+14,36,26,12,12);
         g.setColor(stripeColor);
-        g.fillRoundRect(sx+dx+8,  y+18, 5, 18, 4, 4);
-        g.fillRoundRect(sx+dx+18, y+18, 5, 18, 4, 4);
+        g.fillRoundRect(sx+dx+8, y+18,5,18,4,4);
+        g.fillRoundRect(sx+dx+18,y+18,5,18,4,4);
 
         // JETPACK
         if (!onGround) {
-            int jpx = facingRight ? sx-6 : sx+width-6;
-            g.setColor(new Color(70,70,180));
-            g.fillRoundRect(jpx, y+16, 12, 18, 4, 4);
-            g.setColor(new Color(150,150,220));
-            g.fillRoundRect(jpx+2, y+18, 8, 6, 2, 2);
-            g.setColor(new Color(255,80,0));
-            g.fillOval(jpx+1, y+33, 10, 12);
-            g.setColor(Color.YELLOW);
-            g.fillOval(jpx+3, y+36, 6, 8);
+            int jpx=facingRight?sx-6:sx+width-6;
+            g.setColor(new Color(70,70,180)); g.fillRoundRect(jpx,y+16,12,18,4,4);
+            g.setColor(new Color(150,150,220)); g.fillRoundRect(jpx+2,y+18,8,6,2,2);
+            g.setColor(new Color(255,80,0)); g.fillOval(jpx+1,y+33,10,12);
+            g.setColor(Color.YELLOW); g.fillOval(jpx+3,y+36,6,8);
         }
 
         // HEAD
         g.setColor(bodyColor);
-        g.fillOval(sx+dx+2, y-2, 32, 30);
+        g.fillOval(sx+dx+2,y-2,32,30);
 
         // EARS
         g.setColor(stripeColor);
-        g.fillPolygon(new int[]{sx+dx+4, sx+dx+10,sx+dx+1},  new int[]{y+2,y+2,y-14}, 3);
-        g.fillPolygon(new int[]{sx+dx+24,sx+dx+30,sx+dx+35}, new int[]{y+2,y-14,y+2},  3);
+        g.fillPolygon(new int[]{sx+dx+4,sx+dx+10,sx+dx+1},  new int[]{y+2,y+2,y-14},3);
+        g.fillPolygon(new int[]{sx+dx+24,sx+dx+30,sx+dx+35},new int[]{y+2,y-14,y+2}, 3);
         g.setColor(new Color(255,180,180));
-        g.fillPolygon(new int[]{sx+dx+5, sx+dx+9, sx+dx+3},  new int[]{y+1,y+1,y-9},  3);
-        g.fillPolygon(new int[]{sx+dx+25,sx+dx+29,sx+dx+33}, new int[]{y+1,y-9,y+1},  3);
+        g.fillPolygon(new int[]{sx+dx+5,sx+dx+9,sx+dx+3},   new int[]{y+1,y+1,y-9},  3);
+        g.fillPolygon(new int[]{sx+dx+25,sx+dx+29,sx+dx+33},new int[]{y+1,y-9,y+1},  3);
 
         // EYES
         g.setColor(Color.WHITE);
-        g.fillOval(sx+dx+6,  y+6, 10, 10);
-        g.fillOval(sx+dx+20, y+6, 10, 10);
+        g.fillOval(sx+dx+6, y+6,10,10); g.fillOval(sx+dx+20,y+6,10,10);
         g.setColor(new Color(40,20,0));
-        if (facingRight) { g.fillOval(sx+dx+9,y+8,6,6); g.fillOval(sx+dx+23,y+8,6,6); }
-        else             { g.fillOval(sx+dx+7,y+8,6,6); g.fillOval(sx+dx+21,y+8,6,6); }
+        if (facingRight){g.fillOval(sx+dx+9,y+8,6,6);g.fillOval(sx+dx+23,y+8,6,6);}
+        else            {g.fillOval(sx+dx+7,y+8,6,6);g.fillOval(sx+dx+21,y+8,6,6);}
         g.setColor(Color.WHITE);
-        g.fillOval(sx+dx+12, y+8, 3, 3);
-        g.fillOval(sx+dx+26, y+8, 3, 3);
+        g.fillOval(sx+dx+12,y+8,3,3); g.fillOval(sx+dx+26,y+8,3,3);
 
         // NOSE
         g.setColor(new Color(255,100,150));
-        g.fillPolygon(new int[]{sx+dx+15,sx+dx+12,sx+dx+18}, new int[]{y+19,y+16,y+16}, 3);
+        g.fillPolygon(new int[]{sx+dx+15,sx+dx+12,sx+dx+18},new int[]{y+19,y+16,y+16},3);
 
         // WHISKERS
         g.setColor(new Color(80,80,80));
@@ -161,35 +229,32 @@ public class Player {
 
         // PAWS
         g.setColor(bodyColor);
-        g.fillOval(sx+dx+4,  y+37,12,8);
-        g.fillOval(sx+dx+20, y+37,12,8);
+        g.fillOval(sx+dx+4, y+37,12,8); g.fillOval(sx+dx+20,y+37,12,8);
         g.setColor(new Color(255,180,180));
-        g.fillOval(sx+dx+6,  y+39,4,4);
-        g.fillOval(sx+dx+22, y+39,4,4);
+        g.fillOval(sx+dx+6, y+39,4,4);  g.fillOval(sx+dx+22,y+39,4,4);
     }
 
     public void keyPressed(int key) {
-        if (key == KeyEvent.VK_LEFT)  { movingLeft = true;  facingRight = false; }
-        if (key == KeyEvent.VK_RIGHT) { movingRight = true; facingRight = true;  }
-        if (key == KeyEvent.VK_SPACE || key == KeyEvent.VK_UP) jumpPressed = true;
+        if (key==KeyEvent.VK_LEFT)  {movingLeft=true;  facingRight=false;}
+        if (key==KeyEvent.VK_RIGHT) {movingRight=true; facingRight=true; }
+        if (key==KeyEvent.VK_SPACE||key==KeyEvent.VK_UP) jumpPressed=true;
     }
 
     public void keyReleased(int key) {
-        if (key == KeyEvent.VK_LEFT)  movingLeft  = false;
-        if (key == KeyEvent.VK_RIGHT) movingRight = false;
-        if (key == KeyEvent.VK_SPACE || key == KeyEvent.VK_UP) {
-            jumpPressed  = false;
-            jumpConsumed = false;
+        if (key==KeyEvent.VK_LEFT)  movingLeft=false;
+        if (key==KeyEvent.VK_RIGHT) movingRight=false;
+        if (key==KeyEvent.VK_SPACE||key==KeyEvent.VK_UP) {
+            jumpPressed=false;
+            jumpConsumed=false; // reset EVERY time key released so double jump always registers
         }
     }
-
     public void respawn() {
-        x = SPAWN_X; y = SPAWN_Y;
-        velocityX = 0; velocityY = 0;
-        movingLeft = false; movingRight = false;
-        jumpPressed = false; jumpConsumed = false;
-        onGround = false;
+        x=SPAWN_X; y=SPAWN_Y;
+        velocityX=0; velocityY=0;
+        movingLeft=false; movingRight=false;
+        jumpPressed=false; jumpConsumed=false;
+        onGround=false; doubleJumpUsed=false;
     }
 
-    public Rectangle getBounds() { return new Rectangle(x, y, width, height); }
+    public Rectangle getBounds() { return new Rectangle(x,y,width,height); }
 }

@@ -20,6 +20,7 @@ public class GamePanel extends JPanel implements ActionListener, KeyListener {
     private ScorePanel        scorePanel;
     public static LevelManager level;
     public static SoundManager sound;
+    private PowerupManager powerups;
 
     public static int currentLevel    = 1;
     private static final int MAX_LEVELS = 3;
@@ -43,6 +44,8 @@ public class GamePanel extends JPanel implements ActionListener, KeyListener {
         scorePanel = new ScorePanel();
         level      = new LevelManager(currentLevel);
         sound      = new SoundManager();
+        PowerupManager.reset();
+        powerups   = new PowerupManager(currentLevel);
     }
 
     private void loadLevel(int lvl) {
@@ -50,11 +53,15 @@ public class GamePanel extends JPanel implements ActionListener, KeyListener {
         player = new Player();
         enemy  = new Enemy(lvl);
         level  = new LevelManager(lvl);
+        PowerupManager.reset();
+        powerups = new PowerupManager(lvl);
+        if (lvl == 3) enemy.initBoss(player); // spawn boss immediately with correct player ref
     }
 
     public void startGameLoop() {
         gameTimer = new Timer(1000 / FPS, this);
         gameTimer.start();
+        sound.playBackgroundMusic(0); // plays background_menu.wav
     }
 
     @Override
@@ -66,7 +73,7 @@ public class GamePanel extends JPanel implements ActionListener, KeyListener {
                 transitionTimer = 0;
                 loadLevel(currentLevel);
                 gameState = GameState.PLAYING;
-                sound.playBackgroundMusic();
+                sound.playBackgroundMusic(currentLevel);
             }
         }
         repaint();
@@ -77,26 +84,28 @@ public class GamePanel extends JPanel implements ActionListener, KeyListener {
         enemy.update();
         level.update(player);
 
-        // Check enemy / projectile collision
+        if (powerups != null) powerups.update(player);
+
         if (enemy.isCatchingPlayer(player)) {
-            scorePanel.loseLife();
-            sound.playHurtSound();
-            if (scorePanel.getLives() <= 0) {
-                gameState = GameState.GAME_OVER;
-                sound.playGameOverSound();
-            } else {
-                player.respawn();
+            if (!player.absorbHit()) {
+                scorePanel.loseLife();
+                sound.playHurtSound();
+                if (scorePanel.getLives() <= 0) {
+                    gameState = GameState.GAME_OVER;
+                    sound.playGameOverSound();
+                } else {
+                    player.respawn();
+                }
             }
         }
 
-        // Check goal reached
         if (level.playerReachedGoal(player)) {
             scorePanel.addScore(500);
             sound.playWinSound();
             if (currentLevel >= MAX_LEVELS) {
                 gameState = GameState.WIN;
             } else {
-                currentLevel++;              // advance ONCE here
+                currentLevel++;
                 gameState = GameState.LEVEL_TRANSITION;
                 transitionTimer = 0;
             }
@@ -123,7 +132,9 @@ public class GamePanel extends JPanel implements ActionListener, KeyListener {
         level.draw(g);
         player.draw(g);
         enemy.draw(g);
+        if (powerups != null) powerups.draw(g);
         scorePanel.draw(g, currentLevel);
+        if (powerups != null) powerups.drawHUD(g);
     }
 
     private void drawMenu(Graphics2D g) {
@@ -324,11 +335,12 @@ public class GamePanel extends JPanel implements ActionListener, KeyListener {
         else if (gameState==GameState.CHARACTER_SELECT) {
             if (key==KeyEvent.VK_LEFT)  selectedCharacter=Math.max(0,selectedCharacter-1);
             if (key==KeyEvent.VK_RIGHT) selectedCharacter=Math.min(2,selectedCharacter+1);
-            if (key==KeyEvent.VK_ENTER) {
-                currentLevel=1;
+            if (key == KeyEvent.VK_ENTER) {
+                currentLevel = 1;
+                sound.stopBackgroundMusic(); // stop menu music first
                 initGame();
-                gameState=GameState.PLAYING;
-                sound.playBackgroundMusic();
+                gameState = GameState.PLAYING;
+                sound.playBackgroundMusic(1);
             }
         }
         else if (key==KeyEvent.VK_ENTER &&

@@ -98,7 +98,10 @@ public class Enemy {
         Player target;
         ArrayList<Projectile> projectiles = new ArrayList<>();
 
-        Boss(int sx, int sy, Player p) { x=sx; y=sy; target=p; }
+        Boss(int sx, int sy, Player p) {
+            x=sx; y=sy; target=p;
+            chargeTimer = -120; // negative = 2 second grace period before he starts charging
+        }
 
         void update() {
             chargeTimer++;
@@ -241,10 +244,10 @@ public class Enemy {
 
     public void initBoss(Player p) {
         if (levelNum == 3 && boss == null) {
-            boss = new Boss(2050, 340, p);
+            boss = new Boss(2300, 340, p); // far right of arena
+            boss.chargeTimer = -180;       // 3 second grace period
         }
     }
-
     public void update() {
         for (EnemyUnit u : units) u.update();
         if (boss != null) boss.update();
@@ -256,7 +259,7 @@ public class Enemy {
     }
 
     public boolean isCatchingPlayer(Player player) {
-        if (levelNum == 3 && boss == null) initBoss(player);
+        // REMOVE this line → if (levelNum == 3 && boss == null) initBoss(player);
         Rectangle pb = player.getBounds();
         for (EnemyUnit u : units) if (u.getBounds().intersects(pb)) return true;
         if (boss != null && (boss.hits(player) || boss.projectileHits(player))) return true;

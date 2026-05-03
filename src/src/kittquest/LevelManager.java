@@ -22,7 +22,7 @@ public class LevelManager {
         if (level == 1) {
             // ── LEVEL 1: Grassy Meadow ──────────────────────────────────────
             levelWidth = 1800;
-            goal = new Rectangle(1720, 300, 30, 70);
+            goal = new Rectangle(1755, 278, 30, 70);
             platforms.add(new Rectangle(0,    450, levelWidth, 50)); // ground
             platforms.add(new Rectangle(220,  380, 140, 18));
             platforms.add(new Rectangle(440,  340, 130, 18));
@@ -38,7 +38,7 @@ public class LevelManager {
         } else if (level == 2) {
             // ── LEVEL 2: City Rooftops (easier gaps) ────────────────────────────
             levelWidth = 2000;
-            goal = new Rectangle(1920, 280, 30, 70);
+            goal = new Rectangle(1920, 248, 30, 70);
             // Start rooftop — bigger so you have room
             platforms.add(new Rectangle(0,    420, 350, 30));  // start rooftop
             platforms.add(new Rectangle(420,  400, 180, 20));  // smaller gap
@@ -60,7 +60,7 @@ public class LevelManager {
         } else {
             // ── LEVEL 3: Dark Dungeon / Boss Arena ──────────────────────────
             levelWidth = 2400;
-            goal = new Rectangle(2320, 220, 30, 70);
+            goal = new Rectangle(2320, 288, 30, 70);
             // Separate ground chunks with lava gaps
             platforms.add(new Rectangle(0,    450, 350, 50));  // start chunk
             platforms.add(new Rectangle(420,  450, 200, 50));  // chunk 2
@@ -293,20 +293,32 @@ public class LevelManager {
         int fy = goal.y;
         if (fx < -30 || fx > GamePanel.SCREEN_WIDTH + 30) return;
 
-        g.setColor(new Color(180, 180, 180));
-        g.setStroke(new BasicStroke(4));
-        g.drawLine(fx, fy, fx, fy + goal.height);
+        // Find the platform the goal sits on to anchor the pole base
+        int poleBaseY = fy + goal.height;
+
+        // Pole
+        g.setColor(new Color(200, 200, 210));
+        g.setStroke(new BasicStroke(5));
+        g.drawLine(fx, fy, fx, poleBaseY);
         g.setStroke(new BasicStroke(1));
 
-        Color flagColor = levelNum == 3 ? new Color(200, 50, 200) : levelNum == 2 ? new Color(50, 150, 255) : new Color(220, 50, 50);
-        int[] flagX = {fx, fx+28, fx};
-        int[] flagY = {fy, fy+12, fy+24};
+        // Flag
+        int[] flagX = {fx, fx + 30, fx};
+        int[] flagY = {fy, fy + 13, fy + 26};
+        Color flagColor = levelNum == 3 ? new Color(200,50,200)
+                : levelNum == 2 ? new Color(50,150,255)
+                : new Color(220,50,50);
         g.setColor(flagColor);
         g.fillPolygon(flagX, flagY, 3);
         g.setColor(Color.YELLOW);
-        g.fillOval(fx + 8, fy + 8, 8, 8);
-        g.setColor(new Color(100, 70, 30));
-        g.fillRoundRect(fx - 10, fy + goal.height - 5, 20, 10, 4, 4);
+        g.fillOval(fx + 9, fy + 8, 9, 9);
+
+        // Base block sitting ON TOP of platform surface
+        // Base block — wider and flush on platform
+        g.setColor(new Color(120, 80, 30));
+        g.fillRoundRect(fx - 8, poleBaseY - 8, 16, 10, 3, 3);
+        g.setColor(new Color(160, 110, 50));
+        g.fillRoundRect(fx - 6, poleBaseY - 8, 12, 5, 2, 2);
     }
 
     public boolean playerReachedGoal(Player player) { return goal.intersects(player.getBounds()); }

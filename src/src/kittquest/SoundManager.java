@@ -1,49 +1,64 @@
 package kittquest;
 
 import javax.sound.sampled.*;
-import java.io.File;
+import java.net.URL;
 
-/**
- * SoundManager.java - Sound Effects & Music
- * Author: [Member 6's Name]
- *
- * TODO - Member 6:
- *  - Load .wav files and play them at the right moments
- *  - Free sounds: freesound.org or mixkit.co
- *  - Put .wav files in a /sounds folder in the project
- */
 public class SoundManager {
+
+    private Clip backgroundMusic;
 
     public SoundManager() {}
 
     public void playBackgroundMusic() {
-        System.out.println("[Sound] Background music started");
+        playBackgroundMusic(1);
     }
 
-    public void playJumpSound() {
-        System.out.println("[Sound] Jump!");
+    public void playBackgroundMusic(int level) {
+        stopBackgroundMusic();
+        String track;
+        switch (level) {
+            case 0:  track = "background_menu.wav"; break;
+            case 2:  track = "background_2.wav";    break;
+            case 3:  track = "background_3.wav";    break;
+            default: track = "background_1.wav";    break;
+        }
+        backgroundMusic = loadClip(track);
+        if (backgroundMusic != null) {
+            backgroundMusic.loop(Clip.LOOP_CONTINUOUSLY);
+            backgroundMusic.start();
+        }
     }
 
-    public void playHurtSound() {
-        System.out.println("[Sound] Ouch!");
+    public void stopBackgroundMusic() {
+        if (backgroundMusic != null && backgroundMusic.isRunning()) {
+            backgroundMusic.stop();
+            backgroundMusic.close();
+            backgroundMusic = null;
+        }
     }
 
-    public void playWinSound() {
-        System.out.println("[Sound] You win!");
+    public void playJumpSound()    { playOnce("jump.wav");     }
+    public void playHurtSound()    { playOnce("hurt.wav");     }
+    public void playWinSound()     { playOnce("win.wav");      }
+    public void playGameOverSound(){ playOnce("gameover.wav"); }
+
+    private void playOnce(String filename) {
+        Clip clip = loadClip(filename);
+        if (clip != null) clip.start();
     }
 
-    public void playGameOverSound() {
-        System.out.println("[Sound] Game over!");
-    }
-
-    private void playClip(String filePath) {
+    private Clip loadClip(String filename) {
         try {
-            AudioInputStream audio = AudioSystem.getAudioInputStream(new File(filePath));
+            URL url = getClass().getClassLoader().getResource(filename);
+            System.out.println("[Sound] Looking for: " + filename + " → found: " + (url != null));
+            if (url == null) return null;
+            AudioInputStream audio = AudioSystem.getAudioInputStream(url);
             Clip clip = AudioSystem.getClip();
             clip.open(audio);
-            clip.start();
+            return clip;
         } catch (Exception e) {
-            System.out.println("[Sound] Could not load: " + filePath);
+            System.out.println("[Sound] Error loading " + filename + ": " + e.getMessage());
+            return null;
         }
     }
 }
