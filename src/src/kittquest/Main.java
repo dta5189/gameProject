@@ -4,7 +4,7 @@ import javax.swing.JFrame;
 
 /**
  * KittyQuest - Main Entry Point
- * Author: [Your Name] (Lead)
+ * Author: David Adeleye (Lead)
  *
  * This class launches the game window.
  * All game logic lives in GamePanel.java
